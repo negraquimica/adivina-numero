@@ -1,0 +1,243 @@
+<title>Adivina el número</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+  /* Layout: una sola columna centrada; la recta numérica 1–100 es la pieza central y se estrecha con cada pista */
+  :root {
+    --bg: #edf1f5;
+    --surface: #ffffff;
+    --fg: #15223b;
+    --muted: #5a6780;
+    --line: #d3dbe6;
+    --accent: #0b7a75;
+    --accent-fg: #ffffff;
+    --up: #b4470f;
+    --down: #1f4fd1;
+    --font-display: "Space Grotesk", "Trebuchet MS", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101827; --surface: #1a2437; --fg: #e8edf5; --muted: #9aa7bd; --line: #2f3c55;
+      --accent: #3fc1b9; --accent-fg: #06201f; --up: #f59a62; --down: #8fb0ff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101827; --surface: #1a2437; --fg: #e8edf5; --muted: #9aa7bd; --line: #2f3c55;
+    --accent: #3fc1b9; --accent-fg: #06201f; --up: #f59a62; --down: #8fb0ff;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    padding-block: 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  main {
+    max-width: 460px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: 2.1rem;
+    line-height: 1.1;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .intro { margin: 8px 0 0; color: var(--muted); }
+
+  /* Intentos: siete marcas que se van gastando */
+  .tries { display: flex; align-items: center; gap: 12px; }
+  .tries-label { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .dots { display: flex; gap: 6px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+  .dot.used { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
+
+  /* Recta numérica */
+  .range { display: flex; flex-direction: column; gap: 6px; }
+  .track { position: relative; height: 14px; border-radius: 7px; background: var(--line); }
+  .span {
+    position: absolute; top: 0; bottom: 0; min-width: 8px;
+    border-radius: 7px; background: var(--accent);
+    transition: left .35s ease, width .35s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .span { transition: none; } }
+  .range-ends {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-display); font-variant-numeric: tabular-nums; font-size: 0.95rem;
+  }
+  .range-ends span:nth-child(2) { color: var(--muted); font-family: var(--font-body); font-size: 0.85rem; }
+
+  form { display: flex; gap: 10px; }
+  input[type="number"] {
+    flex: 1; min-width: 0;
+    font: 700 1.5rem var(--font-display);
+    font-variant-numeric: tabular-nums;
+    padding: 10px 14px;
+    color: var(--fg); background: var(--surface);
+    border: 2px solid var(--line); border-radius: 10px;
+  }
+  button {
+    font: 600 1rem var(--font-body);
+    padding: 0 22px; min-height: 52px;
+    color: var(--accent-fg); background: var(--accent);
+    border: 0; border-radius: 10px; cursor: pointer;
+  }
+  button:disabled, input:disabled { opacity: .45; cursor: not-allowed; }
+  input:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #again { align-self: flex-start; }
+
+  .msg {
+    min-height: 3.2em; margin: 0;
+    font-family: var(--font-display); font-size: 1.3rem; line-height: 1.3; font-weight: 500;
+  }
+  .msg small { display: block; font: 400 0.95rem var(--font-body); color: var(--muted); }
+  .msg.up { color: var(--up); }
+  .msg.down { color: var(--down); }
+
+  .history { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; min-height: 34px; }
+  .history li {
+    font: 500 0.95rem var(--font-display); font-variant-numeric: tabular-nums;
+    padding: 4px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line);
+  }
+  .history .up { color: var(--up); }
+  .history .down { color: var(--down); }
+  .history .hit { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
+</style>
+
+<main>
+  <header>
+    <h1>Adivina el número</h1>
+    <p class="intro">Estoy pensando en un número entre 1 y 100. Tienes 7 intentos.</p>
+  </header>
+
+  <div class="tries">
+    <span class="tries-label">Intentos</span>
+    <div class="dots" id="dots" role="img" aria-label="Quedan 7 intentos"></div>
+  </div>
+
+  <div class="range">
+    <div class="track"><div class="span" id="span"></div></div>
+    <div class="range-ends"><span id="lo">1</span><span>el número está aquí</span><span id="hi">100</span></div>
+  </div>
+
+  <form id="form" novalidate>
+    <input type="number" id="guess" inputmode="numeric" min="1" max="100" aria-label="Tu número" placeholder="?" autocomplete="off">
+    <button type="submit" id="try">Probar</button>
+  </form>
+
+  <p class="msg" id="msg" aria-live="polite">Escribe un número y pulsa Probar.</p>
+
+  <ul class="history" id="history" aria-label="Números que ya probaste"></ul>
+
+  <button type="button" id="again" hidden>Jugar otra vez</button>
+</main>
+
+<script>
+  const MAX_INTENTOS = 7;
+  const $ = (id) => document.getElementById(id);
+  let secreto, intentos, lo, hi, terminado, jugadas;
+
+  function nuevoJuego() {
+    secreto = Math.floor(Math.random() * 100) + 1;
+    intentos = 0; lo = 1; hi = 100; terminado = false; jugadas = [];
+    decir("Escribe un número y pulsa Probar.");
+    $("guess").value = "";
+    pintar();
+    $("guess").focus();
+  }
+
+  function decir(texto, detalle, clase) {
+    const m = $("msg");
+    m.className = "msg" + (clase ? " " + clase : "");
+    m.textContent = texto;
+    if (detalle) {
+      const s = document.createElement("small");
+      s.textContent = detalle;
+      m.appendChild(s);
+    }
+  }
+
+  function pintar() {
+    const restantes = MAX_INTENTOS - intentos;
+    const dots = $("dots");
+    dots.innerHTML = "";
+    for (let i = 0; i < MAX_INTENTOS; i++) {
+      const d = document.createElement("span");
+      d.className = "dot" + (i >= restantes ? " used" : "");
+      dots.appendChild(d);
+    }
+    dots.setAttribute("aria-label", restantes === 1 ? "Queda 1 intento" : "Quedan " + restantes + " intentos");
+
+    $("lo").textContent = lo;
+    $("hi").textContent = hi;
+    $("span").style.left = ((lo - 1) / 99 * 100) + "%";
+    $("span").style.width = ((hi - lo) / 99 * 100) + "%";
+
+    const h = $("history");
+    h.innerHTML = "";
+    for (const j of jugadas) {
+      const li = document.createElement("li");
+      li.className = j.tipo;
+      li.textContent = j.n + (j.tipo === "up" ? " ⬆" : j.tipo === "down" ? " ⬇" : " ✓");
+      h.appendChild(li);
+    }
+
+    $("guess").disabled = terminado;
+    $("try").disabled = terminado;
+    $("again").hidden = !terminado;
+  }
+
+  function probar(texto) {
+    if (terminado) return;
+    const numero = Number(texto);
+    // Una entrada inválida no gasta intento, igual que en la versión de Python
+    if (texto.trim() === "" || !Number.isInteger(numero) || numero < 1 || numero > 100) {
+      decir("Eso no es un número entre 1 y 100.", "Intenta de nuevo; no gastaste ningún intento.");
+      return;
+    }
+    intentos++;
+    const restantes = MAX_INTENTOS - intentos;
+
+    if (numero === secreto) {
+      terminado = true;
+      lo = hi = secreto;
+      jugadas.push({ n: numero, tipo: "hit" });
+      decir("¡Correcto!", "Lo lograste en " + intentos + (intentos === 1 ? " intento." : " intentos."));
+    } else {
+      const alto = numero < secreto;
+      jugadas.push({ n: numero, tipo: alto ? "up" : "down" });
+      if (alto) lo = Math.max(lo, numero + 1); else hi = Math.min(hi, numero - 1);
+      if (restantes === 0) {
+        terminado = true;
+        decir("Se acabaron los intentos.", "El número era " + secreto + ".");
+      } else {
+        decir(alto ? "Más alto ⬆" : "Más bajo ⬇",
+              restantes === 1 ? "Queda 1 intento." : "Te quedan " + restantes + " intentos.",
+              alto ? "up" : "down");
+      }
+    }
+    pintar();
+    if (terminado) $("again").focus();
+  }
+
+  $("form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const g = $("guess");
+    probar(g.value);
+    g.value = "";
+    if (!terminado) g.focus();
+  });
+  $("again").addEventListener("click", nuevoJuego);
+
+  nuevoJuego();
+</script>
